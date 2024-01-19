@@ -1,12 +1,20 @@
+# FrixZJax
+
+- This fork is use privately to fix a centering issue when using TikZ's `graphs`
+  library.
+
 <img width=275 align="right" src="./imgs/screenshot.png">
 
 # Obsidian TikZJax
 
-A plugin for Obsidian that lets you render LaTeX and TikZ diagrams in your notes.
+A plugin for Obsidian that lets you render LaTeX and TikZ diagrams in your
+notes.
 
-You can render graphs, figures, circuits, chemical diagrams, commutative diagrams, and more.
+You can render graphs, figures, circuits, chemical diagrams, commutative
+diagrams, and more.
 
 The following packages are available in `\usepackage{}`:
+
 - chemfig
 - tikz-cd
 - circuitikz
@@ -19,14 +27,16 @@ The following packages are available in `\usepackage{}`:
 - tikz-3dplot
 
 ## Usage
+
 Content inside of `tikz` code blocks will be rendered by TikZJax.
 
-- Remember to load any packages you need with `\usepackage{}`, and include `\begin{document}` and `\end{document}`.
+- Remember to load any packages you need with `\usepackage{}`, and include
+  `\begin{document}` and `\end{document}`.
 
 - The standalone document class is used (`\documentclass{standalone}`).
 
-
 ### Examples
+
 <img width=300 align="right" src="./imgs/img1.png">
 
 ````latex
@@ -169,7 +179,10 @@ C' \arrow[rr,"k'" near end] \arrow[dr,swap,"c"] && D' \arrow[dr,swap,"d"] \\
 ```
 ````
 
-
 ## Acknowledgements
-This plugin would not be possible without [TikZJax](https://github.com/kisonecat/tikzjax) by [@kisonecat](https://github.com/kisonecat)! In particular, it uses
-[@drgrice1's fork](https://github.com/drgrice1/tikzjax/tree/ww-modifications) that adds some additional features.
+
+This plugin would not be possible without
+[TikZJax](https://github.com/kisonecat/tikzjax) by
+[@kisonecat](https://github.com/kisonecat)! In particular, it uses
+[@drgrice1's fork](https://github.com/drgrice1/tikzjax/tree/ww-modifications)
+that adds some additional features.

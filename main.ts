@@ -1,186 +1,192 @@
-import { Plugin, WorkspaceWindow } from 'obsidian';
-import { TikzjaxPluginSettings, DEFAULT_SETTINGS, TikzjaxSettingTab } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  TikzjaxPluginSettings,
+  TikzjaxSettingTab,
+} from "./settings";
+import { Plugin, WorkspaceWindow } from "obsidian";
+
 import { optimize } from "./svgo.browser";
+import tikzjaxJs from "inline:./tikzjax.js";
 
 // @ts-ignore
-import tikzjaxJs from 'inline:./tikzjax.js';
-
 
 export default class TikzjaxPlugin extends Plugin {
-	settings: TikzjaxPluginSettings;
+  settings: TikzjaxPluginSettings;
 
-	async onload() {
-		await this.loadSettings();
-		this.addSettingTab(new TikzjaxSettingTab(this.app, this));
+  async onload() {
+    await this.loadSettings();
+    this.addSettingTab(new TikzjaxSettingTab(this.app, this));
 
-		// Support pop-out windows
-		this.app.workspace.onLayoutReady(() => {
-			this.loadTikZJaxAllWindows();
-			this.registerEvent(this.app.workspace.on("window-open", (win, window) => {
-				this.loadTikZJax(window.document);
-			}));
-		});
+    // Support pop-out windows
+    this.app.workspace.onLayoutReady(() => {
+      this.loadTikZJaxAllWindows();
+      this.registerEvent(
+        this.app.workspace.on("window-open", (win, window) => {
+          this.loadTikZJax(window.document);
+        })
+      );
+    });
 
+    this.addSyntaxHighlighting();
 
-		this.addSyntaxHighlighting();
-		
-		this.registerTikzCodeBlock();
-	}
+    this.registerTikzCodeBlock();
+  }
 
-	onunload() {
-		this.unloadTikZJaxAllWindows();
-		this.removeSyntaxHighlighting();
-	}
+  onunload() {
+    this.unloadTikZJaxAllWindows();
+    this.removeSyntaxHighlighting();
+  }
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 
+  loadTikZJax(doc: Document) {
+    const s = document.createElement("script");
+    s.id = "tikzjax";
+    s.type = "text/javascript";
+    s.innerText = tikzjaxJs;
+    doc.body.appendChild(s);
 
-	loadTikZJax(doc: Document) {
-		const s = document.createElement("script");
-		s.id = "tikzjax";
-		s.type = "text/javascript";
-		s.innerText = tikzjaxJs;
-		doc.body.appendChild(s);
+    doc.addEventListener("tikzjax-load-finished", this.postProcessSvg);
+  }
 
+  unloadTikZJax(doc: Document) {
+    const s = doc.getElementById("tikzjax");
+    s.remove();
 
-		doc.addEventListener('tikzjax-load-finished', this.postProcessSvg);
-	}
+    doc.removeEventListener("tikzjax-load-finished", this.postProcessSvg);
+  }
 
-	unloadTikZJax(doc: Document) {
-		const s = doc.getElementById("tikzjax");
-		s.remove();
+  loadTikZJaxAllWindows() {
+    for (const window of this.getAllWindows()) {
+      this.loadTikZJax(window.document);
+    }
+  }
 
-		doc.removeEventListener("tikzjax-load-finished", this.postProcessSvg);
-	}
+  unloadTikZJaxAllWindows() {
+    for (const window of this.getAllWindows()) {
+      this.unloadTikZJax(window.document);
+    }
+  }
 
-	loadTikZJaxAllWindows() {
-		for (const window of this.getAllWindows()) {
-			this.loadTikZJax(window.document);
-		}
-	}
+  getAllWindows() {
+    // Via https://discord.com/channels/686053708261228577/840286264964022302/991591350107635753
 
-	unloadTikZJaxAllWindows() {
-		for (const window of this.getAllWindows()) {
-			this.unloadTikZJax(window.document);
-		}
-	}
+    const windows = [];
 
-	getAllWindows() {
-		// Via https://discord.com/channels/686053708261228577/840286264964022302/991591350107635753
+    // push the main window's root split to the list
+    windows.push(this.app.workspace.rootSplit.win);
 
-		const windows = [];
-		
-		// push the main window's root split to the list
-		windows.push(this.app.workspace.rootSplit.win);
-		
-		// @ts-ignore floatingSplit is undocumented
-		const floatingSplit = this.app.workspace.floatingSplit;
-		floatingSplit.children.forEach((child: any) => {
-			// if this is a window, push it to the list 
-			if (child instanceof WorkspaceWindow) {
-				windows.push(child.win);
-			}
-		});
+    // @ts-ignore floatingSplit is undocumented
+    const floatingSplit = this.app.workspace.floatingSplit;
+    floatingSplit.children.forEach((child: any) => {
+      // if this is a window, push it to the list
+      if (child instanceof WorkspaceWindow) {
+        windows.push(child.win);
+      }
+    });
 
-		return windows;
-	}
+    return windows;
+  }
 
+  registerTikzCodeBlock() {
+    this.registerMarkdownCodeBlockProcessor("tikz", (source, el, ctx) => {
+      const script = el.createEl("script");
 
-	registerTikzCodeBlock() {
-		this.registerMarkdownCodeBlockProcessor("tikz", (source, el, ctx) => {
-			const script = el.createEl("script");
+      script.setAttribute("type", "text/tikz");
+      script.setAttribute("data-show-console", "true");
 
-			script.setAttribute("type", "text/tikz");
-			script.setAttribute("data-show-console", "true");
+      script.setText(this.tidyTikzSource(source));
+    });
+  }
 
-			script.setText(this.tidyTikzSource(source));
-		});
-	}
+  addSyntaxHighlighting() {
+    // @ts-ignore
+    window.CodeMirror.modeInfo.push({
+      name: "Tikz",
+      mime: "text/x-latex",
+      mode: "stex",
+    });
+  }
 
+  removeSyntaxHighlighting() {
+    // @ts-ignore
+    window.CodeMirror.modeInfo = window.CodeMirror.modeInfo.filter(
+      (el) => el.name != "Tikz"
+    );
+  }
 
-	addSyntaxHighlighting() {
-		// @ts-ignore
-		window.CodeMirror.modeInfo.push({name: "Tikz", mime: "text/x-latex", mode: "stex"});
-	}
+  tidyTikzSource(tikzSource: string) {
+    // Remove non-breaking space characters, otherwise we get errors
+    const remove = "&nbsp;";
+    tikzSource = tikzSource.replaceAll(remove, "");
 
-	removeSyntaxHighlighting() {
-		// @ts-ignore
-		window.CodeMirror.modeInfo = window.CodeMirror.modeInfo.filter(el => el.name != "Tikz");
-	}
+    let lines = tikzSource.split("\n");
 
-	tidyTikzSource(tikzSource: string) {
+    // Trim whitespace that is inserted when pasting in code, otherwise TikZJax complains
+    lines = lines.map((line) => line.trim());
 
-		// Remove non-breaking space characters, otherwise we get errors
-		const remove = "&nbsp;";
-		tikzSource = tikzSource.replaceAll(remove, "");
+    // Remove empty lines
+    lines = lines.filter((line) => line);
 
+    return lines.join("\n");
+  }
 
-		let lines = tikzSource.split("\n");
+  colorSVGinDarkMode(svg: string) {
+    // Replace the color "black" with currentColor (the current text color)
+    // so that diagram axes, etc are visible in dark mode
+    // And replace "white" with the background color
 
-		// Trim whitespace that is inserted when pasting in code, otherwise TikZJax complains
-		lines = lines.map(line => line.trim());
+    svg = svg
+      .replaceAll(/("#000"|"black")/g, `"currentColor"`)
+      .replaceAll(/("#fff"|"white")/g, `"var(--background-primary)"`);
 
-		// Remove empty lines
-		lines = lines.filter(line => line);
+    return svg;
+  }
 
+  optimizeSVG(svg: string) {
+    // Optimize the SVG using SVGO
+    // Fixes misaligned text nodes on mobile
 
-		return lines.join("\n");
-	}
+    return optimize(svg, {
+      plugins: [
+        {
+          name: "preset-default",
+          params: {
+            overrides: {
+              // Don't use the "cleanupIDs" plugin
+              // To avoid problems with duplicate IDs ("a", "b", ...)
+              // when inlining multiple svgs with IDs
+              cleanupIDs: false,
+            },
+          },
+        },
+      ],
+      // @ts-ignore
+    }).data;
+  }
 
+  postProcessSvg = (e: Event) => {
+    const svgEl = e.target as SVGGraphicsElement;
+    const cbb = svgEl.getBBox();
 
-	colorSVGinDarkMode(svg: string) {
-		// Replace the color "black" with currentColor (the current text color)
-		// so that diagram axes, etc are visible in dark mode
-		// And replace "white" with the background color
+    svgEl.setAttribute(
+      "viewBox",
+      [cbb.x, cbb.y, cbb.width, cbb.height].join(" ")
+    );
 
-		svg = svg.replaceAll(/("#000"|"black")/g, `"currentColor"`)
-				.replaceAll(/("#fff"|"white")/g, `"var(--background-primary)"`);
+    let svg = svgEl.outerHTML;
 
-		return svg;
-	}
+    if (this.settings.invertColorsInDarkMode) {
+      svg = this.colorSVGinDarkMode(svg);
+    }
 
-
-	optimizeSVG(svg: string) {
-		// Optimize the SVG using SVGO
-		// Fixes misaligned text nodes on mobile
-
-		return optimize(svg, {plugins:
-			[
-				{
-					name: 'preset-default',
-					params: {
-						overrides: {
-							// Don't use the "cleanupIDs" plugin
-							// To avoid problems with duplicate IDs ("a", "b", ...)
-							// when inlining multiple svgs with IDs
-							cleanupIDs: false
-						}
-					}
-				}
-			]
-		// @ts-ignore
-		}).data;
-	}
-
-
-	postProcessSvg = (e: Event) => {
-
-		const svgEl = e.target as HTMLElement;
-		let svg = svgEl.outerHTML;
-
-		if (this.settings.invertColorsInDarkMode) {
-			svg = this.colorSVGinDarkMode(svg);
-		}
-
-		svg = this.optimizeSVG(svg);
-
-		svgEl.outerHTML = svg;
-	}
+    svg = this.optimizeSVG(svg);
+    svgEl.outerHTML = svg;
+  };
 }
-
